@@ -1,0 +1,124 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #000000;
+  --foreground: #fcf9f3;
+  --paper-bg: #EFE9D3;
+  --paper-ink: #1F1E1A;
+  --paper-body: #2B2826;
+  --vh: 1svh;
+  --vw: 1svw;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  width: 100%;
+  min-height: 100%;
+  background-color: #000000;
+  color: var(--foreground);
+  font-family: 'STIX Two Text', Georgia, Cambria, 'Times New Roman', serif;
+  overflow-x: hidden;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Typography Helpers */
+.font-stix {
+  font-family: 'STIX Two Text', Georgia, serif;
+}
+
+.font-sans {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.font-mono {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Custom Sleek Dark & Warm Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0a0a0c;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+/* Selection Color */
+::selection {
+  background-color: #d4af37;
+  color: #000000;
+}
+
+/* ── Grabbing cursor during drag ── */
+.cursor-grabbing,
+.cursor-grabbing * {
+  cursor: grabbing !important;
+}
+
+/* Micro animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.8s ease-out forwards;
+}
+
+/* ── Work page iris-open entrance ── */
+@keyframes workPageEnter {
+  0%   { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.work-page-enter {
+  animation: workPageEnter 0.65s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ── Tag pills stagger fade-in ── */
+@keyframes tagFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ── Carousel arrow idle pulse ── */
+@keyframes arrowPulse {
+  0%, 100% { box-shadow: 0 8px 30px rgba(0,0,0,0.6); }
+  50%       { box-shadow: 0 8px 30px rgba(0,0,0,0.6), 0 0 0 3px rgba(255,255,255,0.07); }
+}
+
+.arrow-pulse {
+  animation: arrowPulse 3s ease-in-out infinite;
+}

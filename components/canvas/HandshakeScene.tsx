@@ -1,55 +1,69 @@
 "use client";
 
 import React, { useRef, useEffect } from "react";
-import { motion } from "framer-motion";
 
-export function HandshakeScene() {
+/**
+ * Full-bleed handshake plate.
+ *
+ * Deliberately stripped versus the previous version:
+ *  - no caption block ("Firm handshakes, quiet competence…") — absent from the reference
+ *  - no mini gold tie canvas — the reference has nothing at the contact point
+ *    except the burst igniting, and the shared-GLTF-scene bug made it steal the
+ *    stage tie's model anyway
+ *  - poster + preload so the section is never a black hole while the mp4 buffers
+ *
+ * `zoomRef` is driven by the parent transition so the plate pushes in on scroll,
+ * matching the slow dolly in the reference.
+ */
+export function HandshakeScene({
+  zoomRef,
+  className = "",
+}: {
+  zoomRef?: React.MutableRefObject<number>;
+  className?: string;
+}) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
+  const rafRef = useRef<number>(0);
 
   useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.play().catch(() => {});
-    }
-  }, []);
+    const tryPlay = () => videoRef.current?.play().catch(() => {});
+    tryPlay();
+
+    if (!zoomRef) return;
+    const tick = () => {
+      if (frameRef.current) {
+        const z = 1 + Math.min(1, Math.max(0, zoomRef.current)) * 0.22;
+        frameRef.current.style.transform = `scale(${z.toFixed(4)})`;
+      }
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [zoomRef]);
 
   return (
     <section
-      aria-label="Deal Closing Handshake"
-      className="relative w-full bg-[#050608] py-16 sm:py-24 overflow-hidden flex flex-col items-center select-none"
+      aria-label="Deal closing handshake"
+      className={`relative w-full h-full overflow-hidden bg-[#050608] select-none ${className}`}
     >
-      <div className="relative w-full max-w-5xl mx-auto px-4 flex flex-col items-center">
-        {/* Cinematic Handshake Video Container */}
-        <div className="relative w-full max-w-4xl aspect-[16/9] rounded-2xl overflow-hidden border border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.9)] bg-black">
-          <video
-            ref={videoRef}
-            src="/videos/handshake.mp4"
-            autoPlay
-            loop
-            muted
-            playsInline
-            className="w-full h-full object-cover filter contrast-[1.08] brightness-[0.95]"
-          />
-
-          {/* Golden Glint & Sparkle Overlay */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40 pointer-events-none" />
-
-          {/* Overlay Text: Closing the deal */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.8 }}
-            className="absolute bottom-6 left-0 w-full text-center px-6 pointer-events-none z-10"
-          >
-            <p className="font-stix text-[#f5f2e9] text-xl sm:text-3xl font-medium drop-shadow-[0_2px_12px_rgba(0,0,0,0.9)]">
-              &ldquo;Firm handshakes, quiet competence, and deals sealed with precision.&rdquo;
-            </p>
-            <span className="font-mono text-xs sm:text-sm uppercase tracking-[0.25em] text-[#e5c158] mt-2 block">
-              Deal Closed &bull; Executive Interface
-            </span>
-          </motion.div>
-        </div>
+      <div ref={frameRef} className="absolute inset-0 will-change-transform" style={{ transformOrigin: "50% 50%" }}>
+        <video
+          ref={videoRef}
+          src="/videos/handshake.mp4"
+          poster="/videos/handshake-poster.jpg"
+          preload="auto"
+          autoPlay
+          muted
+          loop
+          playsInline
+          onCanPlay={() => videoRef.current?.play().catch(() => {})}
+          className="absolute inset-0 w-full h-full object-cover filter contrast-[1.08] brightness-[0.95]"
+        />
       </div>
+
+      {/* Cinematic vignette */}
+      <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-black/85 via-transparent to-black/45" />
     </section>
   );
 }

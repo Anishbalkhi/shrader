@@ -1,17 +1,16 @@
 "use client";
 
-import React, { useState } from "react";
-import Link from "next/link";
+import React, { useState, useRef, useEffect } from "react";
 import dynamic from "next/dynamic";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useScroll, useMotionValue } from "framer-motion";
 import { sound } from "@/lib/sound";
 import { Navigation } from "@/components/ui/Navigation";
 import { CRTFilterOverlay } from "@/components/ui";
 import { CalModal } from "@/components/modals";
 
 // Dynamic 3D Scenes for SSR safety
-const OfficeScene = dynamic(
-  () => import("@/components/canvas/OfficeScene").then((m) => m.OfficeScene),
+const PagePeelScene = dynamic(
+  () => import("@/components/canvas/PagePeelScene").then((m) => m.PagePeelScene),
   { ssr: false }
 );
 const GoldenTieScene = dynamic(
@@ -22,10 +21,115 @@ const HandshakeScene = dynamic(
   () => import("@/components/canvas/HandshakeScene").then((m) => m.HandshakeScene),
   { ssr: false }
 );
-const PhonesScene = dynamic(
-  () => import("@/components/canvas/PhonesScene").then((m) => m.PhonesScene),
-  { ssr: false }
-);
+
+function PagePeelSection() {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const progressMotion = useMotionValue(0);
+
+  const targetProgressRef = useRef(0);
+  const currentProgressRef = useRef(0);
+  const autoResetTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    let animId: number;
+
+    const updatePhysics = () => {
+      // Smooth spring damping towards target progress
+      const diff = targetProgressRef.current - currentProgressRef.current;
+      currentProgressRef.current += diff * 0.12;
+      if (Math.abs(diff) < 0.001) {
+        currentProgressRef.current = targetProgressRef.current;
+      }
+      progressMotion.set(currentProgressRef.current);
+      animId = requestAnimationFrame(updatePhysics);
+    };
+    animId = requestAnimationFrame(updatePhysics);
+
+    // Wheel listener specifically capturing reverse (upward) scroll
+    const handleWheel = (e: WheelEvent) => {
+      if (window.scrollY <= 12) {
+        // Scrolling in reverse / upward direction (wheel up)
+        if (e.deltaY < 0) {
+          e.preventDefault();
+          const delta = (-e.deltaY) * 0.0022;
+          targetProgressRef.current = Math.min(1.0, targetProgressRef.current + delta);
+
+          if (autoResetTimerRef.current) clearTimeout(autoResetTimerRef.current);
+          // Gently auto-settle back to flat after 2.5s if left untouched
+          autoResetTimerRef.current = setTimeout(() => {
+            targetProgressRef.current = 0;
+          }, 2500);
+        } else if (e.deltaY > 0 && targetProgressRef.current > 0.01) {
+          // If sheet was peeled in reverse and user scrolls downward, roll it back down
+          e.preventDefault();
+          const delta = e.deltaY * 0.0025;
+          targetProgressRef.current = Math.max(0, targetProgressRef.current - delta);
+          if (autoResetTimerRef.current) clearTimeout(autoResetTimerRef.current);
+        } else {
+          // Normal downward scroll: keep flat (progress = 0)
+          targetProgressRef.current = 0;
+        }
+      } else {
+        // Scrolled down the page: keep flat
+        targetProgressRef.current = 0;
+      }
+    };
+
+    // Touch / trackpad swipe handling for reverse scroll
+    let touchStartY = 0;
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length > 0) {
+        touchStartY = e.touches[0].clientY;
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (window.scrollY <= 5 && e.touches.length > 0) {
+        const touchY = e.touches[0].clientY;
+        const diffY = touchY - touchStartY; // positive when dragging down (reverse scroll at top)
+        if (diffY > 12) {
+          e.preventDefault();
+          targetProgressRef.current = Math.min(1.0, (diffY - 12) * 0.0035);
+          if (autoResetTimerRef.current) clearTimeout(autoResetTimerRef.current);
+        } else if (targetProgressRef.current > 0.02 && diffY < -10) {
+          targetProgressRef.current = Math.max(0, targetProgressRef.current - 0.06);
+        }
+      }
+    };
+
+    const handleTouchEnd = () => {
+      if (autoResetTimerRef.current) clearTimeout(autoResetTimerRef.current);
+      autoResetTimerRef.current = setTimeout(() => {
+        targetProgressRef.current = 0;
+      }, 1800);
+    };
+
+    window.addEventListener("wheel", handleWheel, { passive: false });
+    window.addEventListener("touchstart", handleTouchStart, { passive: true });
+    window.addEventListener("touchmove", handleTouchMove, { passive: false });
+    window.addEventListener("touchend", handleTouchEnd, { passive: true });
+
+    return () => {
+      cancelAnimationFrame(animId);
+      if (autoResetTimerRef.current) clearTimeout(autoResetTimerRef.current);
+      window.removeEventListener("wheel", handleWheel);
+      window.removeEventListener("touchstart", handleTouchStart);
+      window.removeEventListener("touchmove", handleTouchMove);
+      window.removeEventListener("touchend", handleTouchEnd);
+    };
+  }, [progressMotion]);
+
+  return (
+    <section
+      ref={containerRef}
+      aria-label="3D Cubicle Matrix to Team Banner Page Curl Transition"
+      className="relative w-full overflow-hidden bg-[#090a0d]"
+      style={{ height: "78dvh", minHeight: "560px", maxHeight: "800px" }}
+    >
+      <PagePeelScene progress={progressMotion} />
+    </section>
+  );
+}
 
 interface AboutSectionProps {
   onOpenCal?: () => void;
@@ -52,20 +156,22 @@ export function AboutSection({
 
   const handleTriggerShred = () => {
     sound.playShred();
+    if (typeof window !== "undefined") {
+      window.location.hash = "contact";
+    }
     setIsShredding(true);
+    // Smoothly scroll to the dark finale underneath as the shred wipe tears the page apart
+    setTimeout(() => {
+      const el = document.getElementById("contact") || document.getElementById("shred-payoff");
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth" });
+      }
+    }, 450);
+
     setTimeout(() => {
       setIsShredded(true);
       setIsShredding(false);
-      // Smoothly reveal and scroll to the Golden Tie reward payoff
-      setTimeout(() => {
-        const el = document.getElementById("shred-payoff");
-        if (el) {
-          el.scrollIntoView({ behavior: "smooth" });
-        } else {
-          handleOpenCal();
-        }
-      }, 500);
-    }, 1800);
+    }, 1900);
   };
 
   const handleRestore = () => {
@@ -134,34 +240,64 @@ export function AboutSection({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 pointer-events-none flex flex-col justify-end bg-black/40 backdrop-blur-[2px]"
+            className="fixed inset-0 z-50 pointer-events-none flex flex-col justify-end bg-black/50 overflow-hidden"
           >
+            {/* SVG Turbulence Filter for Wavy/Torn Physical Paper Edges */}
+            <svg className="absolute w-0 h-0 pointer-events-none" aria-hidden="true">
+              <defs>
+                <filter id="wavy-shred-edge">
+                  <feTurbulence
+                    type="fractalNoise"
+                    baseFrequency="0.04 0.15"
+                    numOctaves="2"
+                    result="noise"
+                  />
+                  <feDisplacementMap
+                    in="SourceGraphic"
+                    in2="noise"
+                    scale="12"
+                    xChannelSelector="R"
+                    yChannelSelector="G"
+                  />
+                </filter>
+              </defs>
+            </svg>
+
             {/* Shredder Header Warning Banner */}
-            <div className="absolute top-24 left-1/2 -translate-x-1/2 bg-red-700 text-white font-mono text-xs sm:text-sm tracking-widest uppercase px-6 py-2 rounded shadow-2xl animate-pulse">
-              ⚠️ EXECUTING MECHANICAL DOCUMENT SHREDDER...
+            <div className="absolute top-20 left-1/2 -translate-x-1/2 bg-red-700/95 text-white font-mono text-xs sm:text-sm tracking-widest uppercase px-6 py-2.5 rounded shadow-2xl z-20 flex items-center gap-2 border border-red-500/30">
+              <span className="inline-block w-2 h-2 rounded-full bg-red-300 animate-ping" />
+              <span>EXECUTING MECHANICAL DOCUMENT SHREDDER...</span>
             </div>
 
-            {/* Shredded vertical paper ribbons falling into the teeth */}
-            <div className="w-full h-full flex overflow-hidden">
-              {Array.from({ length: stripCount }).map((_, i) => {
-                const randomDelay = (i % 5) * 0.08 + Math.random() * 0.15;
-                const randomRotate = ((i % 4) - 1.5) * 6;
+            {/* Wavy Torn Vertical Paper Ribbons tearing downward */}
+            <div
+              className="w-full h-full flex overflow-hidden"
+              style={{ filter: "url(#wavy-shred-edge)" }}
+            >
+              {Array.from({ length: 32 }).map((_, i) => {
+                const isDarkRibbon = i % 3 === 2;
+                const delay = (i % 6) * 0.08 + Math.abs(Math.sin(i * 0.5)) * 0.14;
+                const randomRotate = (i % 2 === 0 ? 1 : -1) * ((i % 4) + 1.2);
                 return (
                   <motion.div
                     key={i}
-                    initial={{ y: "-100%", rotate: 0 }}
+                    initial={{ y: "0%", rotate: 0 }}
                     animate={{
-                      y: ["0%", "120%"],
-                      rotate: [0, randomRotate],
+                      y: ["0%", "5%", "135%"],
+                      rotate: [0, randomRotate * 0.3, randomRotate],
                     }}
                     transition={{
-                      duration: 1.4,
-                      delay: randomDelay,
-                      ease: [0.3, 0, 0.8, 1],
+                      duration: 1.5,
+                      delay: delay,
+                      ease: [0.36, 0, 0.66, -0.05],
                     }}
-                    className="h-full flex-1 border-r border-black/10 shadow-sm"
+                    className="h-[120vh] flex-1 border-r border-black/15 shadow-[0_10px_25px_rgba(0,0,0,0.35)]"
                     style={{
-                      backgroundColor: i % 2 === 0 ? "#EFE9D3" : "#E8E2CB",
+                      backgroundColor: isDarkRibbon
+                        ? "#111217"
+                        : i % 2 === 0
+                        ? "#EFE9D3"
+                        : "#E8E2CB",
                     }}
                   />
                 );
@@ -171,65 +307,31 @@ export function AboutSection({
         )}
       </AnimatePresence>
 
-      {/* ── 1. 3D OFFICE CUBICLE LANDSCAPE TITLE CARD ── */}
-      <section aria-label="Corporate Cubicle Landscape Title Card" className="relative w-full">
-        <OfficeScene />
-      </section>
-
-      {/* ── 2. TEAM BANNER (Cheesy Staged 1980s Corporate Stock Photo) ── */}
-      <section
-        aria-label="Shader Founders and Team"
-        className="relative w-full bg-[#5d9faa] overflow-hidden"
-      >
-        <div className="relative w-full max-w-[1920px] mx-auto overflow-hidden">
-          <picture>
-            <source
-              media="(max-width: 640px)"
-              srcSet="/textures/group_1x1.webp"
-            />
-            <img
-              src="/textures/group_3x2.webp"
-              alt="Shader Founders in dated corporate suits behind Commodore computers with plant"
-              className="w-full h-auto max-h-[88vh] object-cover object-bottom"
-              draggable={false}
-            />
-          </picture>
-
-          {/* CRT Monitor Filter Overlay scoped specifically to this section */}
-          <CRTFilterOverlay />
-
-          {/* Floating SHADER SWEDEN Corporate Badge */}
-          <div className="absolute bottom-5 right-5 sm:bottom-8 sm:right-12 z-30 flex items-center gap-3 bg-black/55 backdrop-blur-md px-4 sm:px-5 py-2 sm:py-2.5 rounded border border-white/20 shadow-xl">
-            <img
-              src="/textures/logo.svg"
-              alt="SHADER"
-              className="h-4 sm:h-5 w-auto object-contain drop-shadow-[0_0_8px_rgba(255,255,255,0.4)]"
-            />
-            <span className="text-[10px] sm:text-xs font-mono uppercase tracking-widest text-[#e8e4d8] border-l border-white/20 pl-2.5">
-              Sweden
-            </span>
-          </div>
-        </div>
-      </section>
+      {/* ── 1 & 2. 3D CUBICLE MATRIX TO TEAM BANNER PAGE CURL & PEEL TRANSITION ── */}
+      <PagePeelSection />
 
       {/* ── 3. NARRATIVE ARC: PART 1 & 2 (Sincere Pitch + Capabilities + The Hinge Line) ── */}
       <section
         aria-label="About Us"
-        className="relative w-full max-w-[1600px] mx-auto px-6 sm:px-12 lg:px-16 pt-16 sm:pt-24 pb-20 sm:pb-28 flex flex-col items-center"
+        className="relative w-full max-w-[1480px] mx-auto px-6 sm:px-12 lg:px-16 pt-10 sm:pt-16 pb-16 sm:pb-24 flex flex-col items-center"
       >
-        {/* Main Headline */}
+        {/* Main Headline with authentic multi-line editorial breaks & warm letterpress drop shadow */}
         <motion.h1
           initial={{ opacity: 0, y: 25 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-60px" }}
           transition={{ duration: 0.85, ease: [0.16, 1, 0.3, 1] }}
-          className="font-stix text-center text-[#1f1e1a] leading-[1.06] tracking-[-0.015em] max-w-[1340px] mx-auto select-none"
+          className="font-stix text-center text-[#221e1a] tracking-[-0.02em] max-w-[1380px] mx-auto select-none"
           style={{
-            fontSize: "clamp(42px, 6.4vw, 108px)",
+            fontSize: "clamp(46px, 5.6vw, 84px)",
             fontWeight: 400,
+            lineHeight: 1.02,
+            textShadow: "0 3px 14px rgba(160, 95, 30, 0.28), 0 1px 2px rgba(100, 50, 10, 0.35)",
           }}
         >
-          Making Digital Storytelling More Playful, Powerful, and Alive
+          <span className="block">Making Digital</span>
+          <span className="block">Storytelling More Playful,</span>
+          <span className="block">Powerful, and Alive</span>
         </motion.h1>
 
         {/* 3-Column Story Structure */}
@@ -238,12 +340,12 @@ export function AboutSection({
           initial="hidden"
           whileInView="visible"
           viewport={{ once: true, margin: "-60px" }}
-          className="relative w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 sm:gap-12 lg:gap-14 mt-14 sm:mt-20 font-stix"
+          className="relative w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 sm:gap-10 lg:gap-12 mt-12 sm:mt-16 font-stix"
         >
           {/* Column 1: Opening — Sincere & Concrete ("Who we are") */}
           <motion.div
             variants={fadeInUp}
-            className="flex flex-col gap-6 text-[#2b2826] text-base sm:text-lg lg:text-[19px] leading-relaxed"
+            className="flex flex-col gap-6 text-[#2c2822] text-[15.5px] sm:text-[16.5px] lg:text-[17.5px] leading-[1.56]"
           >
             <p>
               Shader is a creative development studio specialized in building
@@ -265,7 +367,7 @@ export function AboutSection({
           {/* Column 2: Middle — The Work, Stated Plainly (Capabilities & Crafts) */}
           <motion.div
             variants={fadeInUp}
-            className="flex flex-col gap-6 text-[#2b2826] text-base sm:text-lg lg:text-[19px] leading-relaxed"
+            className="text-[#2c2822] text-[15.5px] sm:text-[16.5px] lg:text-[17.5px] leading-[1.56]"
           >
             <p>
               <span className="text-[#151412] font-semibold">
@@ -274,46 +376,38 @@ export function AboutSection({
               means we can scale and adapt to each challenge. Whether it&apos;s a
               WebGL experiment, an interactive product visualization, a mobile
               app, or an AI-driven experience, we help bold brands stand out
-              across every screen.
-            </p>
-            <p>
-              We build storytelling platforms that demand attention and reward
-              curiosity. We push digital mediums to places you haven&apos;t seen
-              before, and have fun doing it. Beyond code, we offer 3D design and
-              animation, UI and motion design, concepts and digital strategy,
-              full-stack development, and creative consulting.
+              across every screen. We build storytelling platforms that demand
+              attention and reward curiosity. We push digital mediums to places
+              you haven&apos;t seen before, and have fun doing it. Beyond code, we
+              offer 3D design and animation, UI and motion design, concepts and
+              digital strategy, full-stack development, and creative consulting.
             </p>
           </motion.div>
 
-          {/* Column 3: The Hinge Line + Jacob at Computer */}
+          {/* Column 3: The Hinge Line + Jacob at Computer (Natural text-wrap around floated cutout) */}
           <motion.div
             variants={fadeInUp}
-            className="relative flex flex-col justify-between gap-6 text-[#2b2826] text-base sm:text-lg lg:text-[19px] leading-relaxed"
+            className="font-stix text-[#2c2822] text-[15.5px] sm:text-[16.5px] lg:text-[17.5px] leading-[1.56]"
           >
             <p>
               Whether it&apos;s prototyping an idea, launching an augmented
               reality experience, or bringing high-fidelity visuals to life,
               Shader bridges the gap between creative ambition and technical
               execution. Our process is hands-on, collaborative, and tailored for
-              teams that value both craft and innovation. We combine technical
-              expertise with a designer&apos;s eye, ensuring that every
-              interaction feels natural and every pixel is perfectly placed.{" "}
-              {/* The Hinge: The last moment of straight talk before the satire begins */}
-              <span className="text-[#151412] font-semibold italic border-b border-[#2b2826]/30 pb-0.5">
-                We&apos;re not your regular IT department. We don&apos;t
-                troubleshoot printers.
+              teams that value both craft and innovation. We{" "}
+              <span className="float-right ml-4 mb-2 -mr-2 sm:-mr-4 w-[180px] sm:w-[205px] lg:w-[235px] block select-none pointer-events-none drop-shadow-[0_12px_24px_rgba(0,0,0,0.16)]">
+                <img
+                  src="/textures/jake_computer.webp"
+                  alt="Jacob sitting at retro computer holding printout"
+                  className="w-full h-auto object-contain block"
+                  draggable={false}
+                />
               </span>
+              combine technical expertise with a designer&apos;s eye, ensuring
+              that every interaction feels natural and every pixel is perfectly
+              placed. We&apos;re not your regular IT department. We don&apos;t
+              troubleshoot printers.
             </p>
-
-            {/* Jacob at his green-phosphor computer with printout */}
-            <div className="relative mt-2 self-end w-48 sm:w-60 lg:w-72 drop-shadow-[0_8px_20px_rgba(0,0,0,0.18)]">
-              <img
-                src="/textures/jake_computer.webp"
-                alt="Jacob sitting at retro computer holding printout"
-                className="w-full h-auto object-contain"
-                draggable={false}
-              />
-            </div>
           </motion.div>
         </motion.div>
       </section>
@@ -438,7 +532,7 @@ export function AboutSection({
         className="relative w-full max-w-[1600px] mx-auto px-6 sm:px-12 lg:px-16 pt-16 sm:pt-24 pb-20 sm:pb-28"
       >
         <div className="w-full flex flex-col lg:flex-row items-start justify-between gap-14 lg:gap-20">
-          
+
           {/* Left: Straight-Faced Satire of Corporate Jargon */}
           <motion.div
             initial={{ opacity: 0, x: -25 }}
@@ -489,29 +583,6 @@ export function AboutSection({
                 consultation. The future of your business is waiting. Let&apos;s
                 execute.
               </p>
-            </div>
-
-            {/* A High Tech Solutions Company Badge */}
-            <div className="mt-12 pt-8 border-t border-black/15 flex items-center justify-between gap-6">
-              <div className="flex flex-col">
-                <img
-                  src="/textures/logo_dark.svg"
-                  alt="SHADER"
-                  className="h-6 sm:h-7 w-auto object-contain mb-2 opacity-90"
-                />
-                <span className="font-stix italic text-sm sm:text-base text-[#4a4742]">
-                  A High Tech Business Solutions Company
-                </span>
-              </div>
-
-              <div className="w-28 sm:w-36 shrink-0 opacity-90 hover:opacity-100 transition-opacity drop-shadow-[0_4px_16px_rgba(0,0,0,0.2)]">
-                <img
-                  src="/textures/computer_narrow.webp"
-                  alt="Retro Commodore Terminal"
-                  className="w-full h-auto object-contain"
-                  draggable={false}
-                />
-              </div>
             </div>
           </motion.div>
 
@@ -597,6 +668,35 @@ export function AboutSection({
           </motion.div>
         </div>
       </section>
+
+      {/* ── 7.5 STANDALONE FLOATING SECOND LOGO LOCKUP BADGE ── */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.92, y: 30 }}
+        whileInView={{ opacity: 1, scale: 1, y: 0 }}
+        viewport={{ once: false, margin: "-40px" }}
+        transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+        className="relative z-20 -mb-6 sm:-mb-8 w-full flex justify-center px-4"
+      >
+        <div className="inline-flex flex-wrap items-center justify-center gap-4 sm:gap-6 bg-[#FAF7EF]/95 backdrop-blur-md px-6 sm:px-9 py-3.5 sm:py-4 rounded-2xl border border-black/15 shadow-[0_12px_36px_rgba(0,0,0,0.08)] hover:shadow-[0_16px_44px_rgba(0,0,0,0.14)] hover:-translate-y-0.5 transition-all group">
+          <img
+            src="/textures/logo_dark.svg"
+            alt="SHADER"
+            className="h-6 sm:h-7 w-auto object-contain opacity-90 group-hover:scale-105 transition-transform"
+          />
+          <div className="hidden sm:block h-5 w-[1px] bg-black/20" />
+          <span className="font-stix italic text-sm sm:text-base md:text-lg text-[#322f2b] tracking-wide">
+            A High Tech Business Solutions Company
+          </span>
+          <div className="w-8 sm:w-9 shrink-0 opacity-85 group-hover:opacity-100 transition-opacity drop-shadow-sm">
+            <img
+              src="/textures/computer_narrow.webp"
+              alt="Retro Terminal"
+              className="w-full h-auto object-contain"
+              draggable={false}
+            />
+          </div>
+        </div>
+      </motion.div>
 
       {/* ── 8. RAINBOW SEPARATOR STRIPES ── */}
       <div
@@ -705,11 +805,10 @@ export function AboutSection({
           >
             <div
               onClick={handleTriggerShred}
-              className={`relative w-full max-w-[520px] drop-shadow-[0_15px_30px_rgba(0,0,0,0.18)] transition-all duration-500 cursor-pointer ${
-                isShredded
-                  ? "scale-105 filter contrast-125"
-                  : "hover:scale-[1.02] hover:brightness-105"
-              }`}
+              className={`relative w-full max-w-[520px] drop-shadow-[0_15px_30px_rgba(0,0,0,0.18)] transition-all duration-500 cursor-pointer ${isShredded
+                ? "scale-105 filter contrast-125"
+                : "hover:scale-[1.02] hover:brightness-105"
+                }`}
               title="Click Filip to shred the document!"
             >
               <img
@@ -723,200 +822,13 @@ export function AboutSection({
         </div>
       </section>
 
-      {/* ── 10. SHRED PAYOFF & CONTACT CONTINUOUS FLOW ── */}
-      <div id="shred-payoff" className="relative w-full bg-[#07080a] text-white">
+      {/* ── 10. SHRED PAYOFF: GOLDEN TIE & HANDSHAKE CEREMONY ── */}
+      <div id="contact" data-section="shred-payoff" className="relative w-full bg-[#07080a] text-white">
         {/* Golden Tie Mock Award Ceremony */}
         <GoldenTieScene onOpenCal={handleOpenCal} />
 
         {/* Handshake Close-up: Hands closing a deal */}
         <HandshakeScene />
-
-        {/* "Hello" over 3D glowing vintage telephone + "Good buy" */}
-        <PhonesScene />
-
-        {/* Semantic Accessible Contact Section */}
-        <section
-          id="contact"
-          aria-label="Contact"
-          className="relative w-full max-w-6xl mx-auto px-6 sm:px-12 pt-6 pb-24 flex flex-col items-center select-none font-stix"
-        >
-          <div className="w-full text-center mb-16">
-            <h2
-              className="text-[#f5f0e6] leading-none"
-              style={{
-                fontSize: "clamp(56px, 10vw, 150px)",
-                fontWeight: 400,
-                color: "#f5f0e6",
-                letterSpacing: "-0.015em",
-                textShadow:
-                  "0 0 20px rgba(255, 235, 190, 0.55), 0 0 40px rgba(255, 235, 190, 0.25), 0 4px 16px rgba(0,0,0,0.9)",
-              }}
-            >
-              Good buy. Good buy.
-            </h2>
-            <p className="font-stix text-[#d9d5c8] text-lg sm:text-2xl mt-6 font-light max-w-xl mx-auto leading-relaxed">
-              Contact us about your digital project idea or general enquires.
-              Let&apos;s interface, call us today!
-            </p>
-          </div>
-
-          {/* 3-Column Fieldsets */}
-          <div className="w-full grid grid-cols-1 md:grid-cols-3 gap-12 md:gap-8 text-center">
-            {/* General Enquiries */}
-            <fieldset className="border-0 p-0 flex flex-col items-center gap-2">
-              <legend className="text-xl sm:text-2xl font-semibold text-[#f5f0e6] mb-2 drop-shadow">
-                General Enquiries
-              </legend>
-              <a
-                href="mailto:hello@shader.se"
-                onClick={() => sound.playClick()}
-                onMouseEnter={() => sound.playHover()}
-                className="text-lg sm:text-xl text-[#e6e4dc] underline underline-offset-4 decoration-white/30 hover:text-white transition-all"
-              >
-                hello@shader.se
-              </a>
-              <button
-                onClick={handleOpenCal}
-                onMouseEnter={() => sound.playHover()}
-                className="text-lg sm:text-xl text-[#e6e4dc] underline underline-offset-4 decoration-white/30 hover:text-white transition-all cursor-pointer focus:outline-none"
-              >
-                Book a call
-              </button>
-            </fieldset>
-
-            {/* Visit us */}
-            <fieldset className="border-0 p-0 flex flex-col items-center gap-1">
-              <legend className="text-xl sm:text-2xl font-semibold text-[#f5f0e6] mb-2 drop-shadow">
-                Visit us
-              </legend>
-              <p className="text-lg sm:text-xl text-[#d4d1c7]">Laxholmstorget 3</p>
-              <p className="text-lg sm:text-xl text-[#d4d1c7]">602 21 Norrköping</p>
-              <p className="text-lg sm:text-xl text-[#d4d1c7]">Sweden</p>
-            </fieldset>
-
-            {/* Social */}
-            <fieldset className="border-0 p-0 flex flex-col items-center gap-2">
-              <legend className="text-xl sm:text-2xl font-semibold text-[#f5f0e6] mb-2 drop-shadow">
-                Social
-              </legend>
-              <a
-                href="https://www.linkedin.com/company/shadersweden/"
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => sound.playClick()}
-                onMouseEnter={() => sound.playHover()}
-                className="text-lg sm:text-xl text-[#e6e4dc] underline underline-offset-4 decoration-white/30 hover:text-white transition-all"
-              >
-                LinkedIn
-              </a>
-              <a
-                href="https://www.instagram.com/shadersweden/"
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => sound.playClick()}
-                onMouseEnter={() => sound.playHover()}
-                className="text-lg sm:text-xl text-[#e6e4dc] underline underline-offset-4 decoration-white/30 hover:text-white transition-all"
-              >
-                Instagram
-              </a>
-              <a
-                href="https://x.com/shadersweden"
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => sound.playClick()}
-                onMouseEnter={() => sound.playHover()}
-                className="text-lg sm:text-xl text-[#e6e4dc] underline underline-offset-4 decoration-white/30 hover:text-white transition-all"
-              >
-                X (Twitter)
-              </a>
-            </fieldset>
-          </div>
-
-          {/* New Business CEO Card */}
-          <div className="w-full max-w-2xl mt-16 sm:mt-20">
-            <div className="relative w-full rounded-lg p-5 sm:p-7 flex flex-col sm:flex-row items-center gap-6 sm:gap-8 border border-white/20 bg-white/[0.03] backdrop-blur-md shadow-2xl">
-              <div className="w-28 h-28 sm:w-36 sm:h-36 rounded shrink-0 overflow-hidden border border-white/20 bg-black">
-                <img
-                  src="/textures/simon_calling.webp"
-                  alt="Simon, CEO of Shader"
-                  className="w-full h-full object-cover"
-                  draggable={false}
-                />
-              </div>
-              <div className="flex flex-col text-center sm:text-left">
-                <h3 className="text-2xl sm:text-3xl font-semibold text-[#f5f0e6] mb-2">
-                  New business
-                </h3>
-                <p className="text-base sm:text-xl text-[#e6e4dc] leading-snug">
-                  Reach out today to our CEO for new business enquiries at{" "}
-                  <a
-                    href="mailto:ceo@shader.se"
-                    onClick={() => sound.playClick()}
-                    onMouseEnter={() => sound.playHover()}
-                    className="text-white underline underline-offset-4 decoration-white/40 hover:decoration-white font-medium"
-                  >
-                    ceo@shader.se
-                  </a>
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* ── FOOTER BAR (Certification + Shader Logo + Accessibility) ── */}
-          <footer
-            aria-label="Footer"
-            className="w-full max-w-6xl mx-auto mt-20 pt-12 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-10 md:gap-6 text-center select-none"
-          >
-            {/* 1. Certification Badge */}
-            <div className="w-44 sm:w-56 flex flex-col items-center">
-              <img
-                src="/textures/footer_certificate.png"
-                alt="Worldwide Business Certified Company"
-                className="w-full h-auto object-contain opacity-90 hover:opacity-100 transition-opacity drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]"
-                draggable={false}
-              />
-            </div>
-
-            {/* 2. Centered Logo + Tagline + Copyright */}
-            <div className="flex flex-col items-center gap-1.5">
-              <div className="flex items-center gap-2.5 mb-1">
-                <img
-                  src="/textures/logo.svg"
-                  alt="SHADER"
-                  className="h-5 sm:h-6 w-auto object-contain drop-shadow-[0_0_8px_rgba(255,255,255,0.3)]"
-                  style={{
-                    filter:
-                      "drop-shadow(-0.8px 0 0 rgba(255,30,70,0.5)) drop-shadow(0.8px 0 0 rgba(30,220,255,0.5))",
-                  }}
-                />
-              </div>
-              <p className="text-base sm:text-lg italic text-[#e6e4dc]">
-                A High Tech Business Solutions Company
-              </p>
-              <p className="text-xs sm:text-sm text-[#8a8880] mt-1">
-                &copy; Shader Sweden AB. All Rights Reserved.
-              </p>
-            </div>
-
-            {/* 3. Accessibility Badge */}
-            <div className="w-44 sm:w-56 flex flex-col items-center">
-              <Link
-                href="/accessibility-statement"
-                onClick={() => sound.playClick()}
-                onMouseEnter={() => sound.playHover()}
-                className="group block"
-                aria-label="Read our accessibility statement"
-              >
-                <img
-                  src="/textures/a11y.png"
-                  alt="Read our accessibility statement"
-                  className="w-full h-auto object-contain opacity-90 group-hover:opacity-100 group-hover:scale-105 transition-all drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]"
-                  draggable={false}
-                />
-              </Link>
-            </div>
-          </footer>
-        </section>
       </div>
 
       {/* Interactive Cal.com Booking Modal */}

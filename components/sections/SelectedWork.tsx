@@ -21,13 +21,21 @@ const FilmstripScene = dynamic(
 interface SelectedWorkProps {
   onSelectProject: (project: Project) => void;
   onGoHome?: () => void;
+  onGoNext?: () => void;
 }
 
-export function SelectedWork({ onSelectProject, onGoHome }: SelectedWorkProps) {
+export function SelectedWork({
+  onSelectProject,
+  onGoHome,
+  onGoNext,
+}: SelectedWorkProps) {
   // Default to Alamance Foods (index 3) to match reference screenshot
   const [activeIdx, setActiveIdx] = useState(3);
   const total = PROJECTS.length;
   const active = PROJECTS[activeIdx];
+
+  const activeIdxRef = useRef(activeIdx);
+  activeIdxRef.current = activeIdx;
 
   const wheelAccumulator = useRef(0);
   const wheelCooldown = useRef(false);
@@ -39,45 +47,61 @@ export function SelectedWork({ onSelectProject, onGoHome }: SelectedWorkProps) {
   const go = useCallback(
     (dir: 1 | -1) => {
       sound.playClick();
-      setActiveIdx((prev) => (prev + dir + total) % total);
+      const current = activeIdxRef.current;
+      // If at last card and scrolling right/moving next, smoothly transition to 3rd page (About Us)
+      if (dir === 1 && current === total - 1) {
+        if (onGoNext) {
+          onGoNext();
+          return;
+        }
+      }
+      // If at first card and scrolling left/moving prev, smoothly transition back to 1st page (Home)
+      if (dir === -1 && current === 0) {
+        if (onGoHome) {
+          onGoHome();
+          return;
+        }
+      }
+      const nextIdx = (current + dir + total) % total;
+      setActiveIdx(nextIdx);
     },
-    [total]
+    [total, onGoNext, onGoHome]
   );
 
-  // ── Wheel scroll listener to change card with scroll ──────────────────
+  // ── Wheel and trackpad scroll listener to change card with scroll ──────
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
       if (wheelCooldown.current) return;
 
-      wheelAccumulator.current += e.deltaY;
+      // Handle both horizontal trackpad/tilt wheel (deltaX) and vertical scroll (deltaY)
+      const absX = Math.abs(e.deltaX);
+      const absY = Math.abs(e.deltaY);
+      const dominantDelta = absX > absY ? e.deltaX : e.deltaY;
+
+      wheelAccumulator.current += dominantDelta;
       if (resetTimer.current) clearTimeout(resetTimer.current);
       resetTimer.current = setTimeout(() => {
         wheelAccumulator.current = 0;
-      }, 220);
+      }, 160);
 
-      const THRESHOLD = 35;
+      const THRESHOLD = 24;
       if (wheelAccumulator.current > THRESHOLD) {
-        // Scroll DOWN -> Next card (enters from right)
+        // Scroll RIGHT or DOWN -> Next card (or About Us if at end)
         wheelAccumulator.current = 0;
         wheelCooldown.current = true;
         go(1);
         setTimeout(() => {
           wheelCooldown.current = false;
-        }, 250);
+        }, 190);
       } else if (wheelAccumulator.current < -THRESHOLD) {
-        // Scroll UP -> Previous card (retreats to left)
+        // Scroll LEFT or UP -> Prev card (or Home if at start)
         wheelAccumulator.current = 0;
-        if (activeIdx === 0 && onGoHome) {
-          wheelCooldown.current = true;
-          onGoHome();
-        } else {
-          wheelCooldown.current = true;
-          go(-1);
-          setTimeout(() => {
-            wheelCooldown.current = false;
-          }, 250);
-        }
+        wheelCooldown.current = true;
+        go(-1);
+        setTimeout(() => {
+          wheelCooldown.current = false;
+        }, 190);
       }
     };
 
@@ -86,7 +110,7 @@ export function SelectedWork({ onSelectProject, onGoHome }: SelectedWorkProps) {
       window.removeEventListener("wheel", handleWheel);
       if (resetTimer.current) clearTimeout(resetTimer.current);
     };
-  }, [go, activeIdx, onGoHome]);
+  }, [go]);
 
   // Keyboard navigation (Arrow keys, PageUp, PageDown)
   useEffect(() => {
@@ -97,16 +121,12 @@ export function SelectedWork({ onSelectProject, onGoHome }: SelectedWorkProps) {
       }
       if (e.key === "ArrowLeft" || e.key === "ArrowUp" || e.key === "PageUp") {
         e.preventDefault();
-        if (activeIdx === 0 && onGoHome && (e.key === "ArrowUp" || e.key === "PageUp")) {
-          onGoHome();
-        } else {
-          go(-1);
-        }
+        go(-1);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [go, activeIdx, onGoHome]);
+  }, [go]);
 
   return (
     <section
@@ -128,17 +148,13 @@ export function SelectedWork({ onSelectProject, onGoHome }: SelectedWorkProps) {
         const diffY = e.changedTouches[0].clientY - touchStartY.current;
 
         if (Math.abs(diffX) > Math.abs(diffY)) {
-          if (diffX > 40) go(-1);
-          if (diffX < -40) go(1);
+          // Horizontal swipe: left swipe = scroll right / next; right swipe = scroll left / prev
+          if (diffX < -35) go(1);
+          if (diffX > 35) go(-1);
         } else {
-          if (diffY < -40) go(1);
-          if (diffY > 40) {
-            if (activeIdx === 0 && onGoHome) {
-              onGoHome();
-            } else {
-              go(-1);
-            }
-          }
+          // Vertical swipe: up swipe = next; down swipe = prev
+          if (diffY < -35) go(1);
+          if (diffY > 35) go(-1);
         }
         touchStartX.current = null;
         touchStartY.current = null;
@@ -285,26 +301,41 @@ export function SelectedWork({ onSelectProject, onGoHome }: SelectedWorkProps) {
           </svg>
         </button>
 
-        {/* Center Scroll Hint (shader.se style) */}
-        <div
-          className="flex flex-col items-center pointer-events-none opacity-40 hover:opacity-75 transition-opacity"
+        {/* Center Scroll Hint / Page Counter (shader.se style) */}
+        <button
+          type="button"
+          onClick={() => go(1)}
+          onMouseEnter={() => sound.playHover()}
+          className="pointer-events-auto flex flex-col items-center group transition-all hover:scale-105 cursor-pointer focus:outline-none"
           style={{ letterSpacing: "0.08em", fontSize: 11, textTransform: "uppercase" }}
         >
-          <span style={{ color: "rgba(255,255,255,0.7)" }}>Scroll to About Us</span>
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="rgba(255,255,255,0.7)"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="mt-1 animate-bounce"
-          >
-            <path d="M7 13l5 5 5-5M7 6l5 5 5-5" />
-          </svg>
-        </div>
+          {activeIdx === total - 1 ? (
+            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-gold-400/15 border border-gold-400/40 shadow-[0_0_15px_rgba(255,200,80,0.3)] animate-pulse">
+              <span className="text-gold-300 font-medium tracking-wider">
+                END OF WORK — SCROLL RIGHT FOR ABOUT US →
+              </span>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center opacity-70 group-hover:opacity-100 transition-opacity">
+              <span style={{ color: "rgba(255,255,255,0.9)" }}>
+                {String(activeIdx + 1).padStart(2, "0")} / {String(total).padStart(2, "0")} • Scroll for next
+              </span>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="rgba(255,255,255,0.9)"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="mt-1 animate-bounce"
+              >
+                <path d="M7 13l5 5 5-5M7 6l5 5 5-5" />
+              </svg>
+            </div>
+          )}
+        </button>
 
         {/* Next Button (Clean white arrow in dark square) */}
         <button
@@ -312,16 +343,16 @@ export function SelectedWork({ onSelectProject, onGoHome }: SelectedWorkProps) {
           type="button"
           onClick={() => go(1)}
           onMouseEnter={() => sound.playHover()}
-          aria-label="Next project"
+          aria-label={activeIdx === total - 1 ? "Go to About Us" : "Next project"}
           className="pointer-events-auto flex items-center justify-center transition-all hover:scale-105 active:scale-95"
           style={{
             width: 52,
             height: 52,
             borderRadius: 12,
-            background: "rgba(6, 10, 26, 0.82)",
-            border: "1px solid rgba(255, 255, 255, 0.18)",
+            background: activeIdx === total - 1 ? "rgba(25, 20, 10, 0.9)" : "rgba(6, 10, 26, 0.82)",
+            border: activeIdx === total - 1 ? "1.5px solid rgba(255, 200, 80, 0.6)" : "1px solid rgba(255, 255, 255, 0.18)",
+            boxShadow: activeIdx === total - 1 ? "0 0 20px rgba(255, 200, 80, 0.35)" : "0 8px 30px rgba(0,0,0,0.6)",
             backdropFilter: "blur(16px)",
-            boxShadow: "0 8px 30px rgba(0,0,0,0.6)",
             cursor: "pointer",
           }}
         >
@@ -330,7 +361,7 @@ export function SelectedWork({ onSelectProject, onGoHome }: SelectedWorkProps) {
             height="22"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="white"
+            stroke={activeIdx === total - 1 ? "#ffc857" : "white"}
             strokeWidth="2.2"
             strokeLinecap="round"
             strokeLinejoin="round"

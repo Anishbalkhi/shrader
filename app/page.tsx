@@ -20,6 +20,8 @@ export default function HomePage() {
   const [backend, setBackend] = useState<"WebGPU" | "WebGL">("WebGPU");
   const [isLoading, setIsLoading] = useState(true);
   const [scrollProgress, setScrollProgress] = useState(0);
+  const [isNavigatingToWork, setIsNavigatingToWork] = useState(false);
+  const [isReverseEntering, setIsReverseEntering] = useState(false);
 
   const targetProgress = React.useRef(0);
   const currentProgress = React.useRef(0);
@@ -29,6 +31,20 @@ export default function HomePage() {
 
   // Check if returning from reverse scroll or already loaded
   useEffect(() => {
+    setIsNavigatingToWork(false);
+    hasNavigated.current = false;
+
+    // Prefetch next routes immediately for zero-delay transitions
+    router.prefetch("/work");
+    router.prefetch("/about-us");
+
+    // Pre-warm dynamic Three.js filmstrip chunk in memory
+    try {
+      import("@/components/canvas/FilmstripScene");
+    } catch {
+      // safe fallback
+    }
+
     if (typeof window !== "undefined") {
       if (window.location.hash === "#about-us" || window.location.href.includes("#about-us")) {
         router.replace("/about-us");
@@ -39,9 +55,7 @@ export default function HomePage() {
 
       if (isReverse) {
         setIsLoading(false);
-      }
-
-      if (isReverse) {
+        setIsReverseEntering(true);
         // Start fully zoomed in and smoothly zoom out to the wide hero view
         currentProgress.current = 1;
         setScrollProgress(1);
@@ -50,11 +64,14 @@ export default function HomePage() {
         hasNavigated.current = false;
         window.history.replaceState(null, "", window.location.pathname);
         setTimeout(() => {
+          setIsReverseEntering(false);
+        }, 50);
+        setTimeout(() => {
           coolingDown.current = false;
-        }, 1200);
+        }, 1100);
       }
     }
-  }, []);
+  }, [router]);
 
   // Smooth scroll progress loop
   useEffect(() => {
@@ -71,11 +88,14 @@ export default function HomePage() {
         setScrollProgress(currentProgress.current);
       }
 
-      // Check if zoom reached threshold to navigate to Selected Work (/work)
-      if (!hasNavigated.current && !coolingDown.current && currentProgress.current >= 0.94) {
+      // Seamless camera zoom dive threshold to navigate to Selected Work (/work)
+      if (!hasNavigated.current && !coolingDown.current && currentProgress.current >= 0.93) {
         hasNavigated.current = true;
+        setIsNavigatingToWork(true);
         sound.playClick();
-        router.push("/work");
+        setTimeout(() => {
+          router.push("/work");
+        }, 200);
       }
 
       animFrameId.current = requestAnimationFrame(tick);
@@ -89,13 +109,16 @@ export default function HomePage() {
     };
   }, [router]);
 
-  // Wheel and trackpad listener
+  // Wheel and trackpad listener supporting both vertical and horizontal scroll
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
-      if (isLoading || isCalOpen) return;
+      if (isLoading || isCalOpen || isNavigatingToWork) return;
       e.preventDefault();
-      // Sensitivity factor
-      const delta = e.deltaY * 0.0014;
+      // Sensitivity factor - support both deltaY (vertical) and deltaX (horizontal trackpad/tilt wheel)
+      const absX = Math.abs(e.deltaX);
+      const absY = Math.abs(e.deltaY);
+      const dominantDelta = absX > absY ? e.deltaX : e.deltaY;
+      const delta = dominantDelta * 0.0014;
       targetProgress.current = Math.min(1, Math.max(0, targetProgress.current + delta));
     };
 
@@ -188,16 +211,38 @@ export default function HomePage() {
         />
       )}
 
-      {/* Subtle CRT bloom flash as zoom approaches 1 */}
-      {scrollProgress > 0.8 && (
+      {/* Cinematic CRT monitor zoom dissolve matching Selected Work */}
+      {(scrollProgress > 0.78 || isNavigatingToWork) && (
         <div
-          className="pointer-events-none fixed inset-0 z-50 transition-opacity duration-150"
+          className="pointer-events-none fixed inset-0 z-50 transition-opacity"
           style={{
-            opacity: Math.min(1, (scrollProgress - 0.8) / 0.16),
-            background: "radial-gradient(ellipse at center, rgba(255,240,210,0.4) 0%, rgba(20,10,35,0.85) 70%, #000000 100%)",
+            transitionDuration: isNavigatingToWork ? "220ms" : "80ms",
+            transitionTimingFunction: "cubic-bezier(0.16, 1, 0.3, 1)",
+            opacity: isNavigatingToWork ? 1 : Math.min(0.92, (scrollProgress - 0.78) / 0.18),
+            background:
+              "radial-gradient(ellipse at center, rgba(255,245,225,0.4) 0%, rgba(13,27,77,0.7) 65%, #01030a 100%)",
           }}
         />
       )}
+
+      {/* Smooth reverse entrance dissolve when returning from /work */}
+      {isReverseEntering && (
+        <div
+          className="pointer-events-none fixed inset-0 z-50"
+          style={{
+            animation: "reverseEnter 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+            background:
+              "radial-gradient(ellipse at center, rgba(255,245,225,0.4) 0%, rgba(13,27,77,0.7) 65%, #01030a 100%)",
+          }}
+        />
+      )}
+
+      <style>{`
+        @keyframes reverseEnter {
+          0% { opacity: 1; }
+          100% { opacity: 0; pointer-events: none; }
+        }
+      `}</style>
     </main>
   );
 }

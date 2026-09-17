@@ -20,6 +20,67 @@ const ContactScene = dynamic(
   }
 );
 
+// Dynamic Pinned Handshake-to-Contact Burst Wipe Transition
+const HandshakeToContactTransition = dynamic(
+  () => import("@/components/canvas/HandshakeToContactTransition").then((m) => m.HandshakeToContactTransition),
+  { ssr: false }
+);
+
+function PhoneRevealSection({ scrollVal }: { scrollVal: number }) {
+  return (
+    <section
+      id="contact-hero"
+      className="relative w-full h-full flex flex-col items-center justify-between overflow-hidden bg-black"
+    >
+      {/* Top headline area in hero */}
+      <div className="w-full flex flex-col items-center pt-[14vh] z-20 pointer-events-none">
+        <motion.h1
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.85, ease: [0.16, 1, 0.3, 1] }}
+          className="font-stix text-center leading-none px-4 select-none"
+          style={{
+            fontSize: "clamp(64px, 11vw, 160px)",
+            fontWeight: 400,
+            color: "#f5f0e6",
+            letterSpacing: "-0.015em",
+            textShadow:
+              "0 0 20px rgba(255,235,190,0.55), 0 0 40px rgba(255,235,190,0.25), 0 4px 18px rgba(0,0,0,0.9)",
+          }}
+        >
+          “Hello”
+        </motion.h1>
+      </div>
+
+      {/* 3D WebGL Canvas (scales down 1 -> 0.6 and translates upward as user scrolls) */}
+      <div className="absolute inset-0 z-10 pointer-events-auto">
+        <ContactScene scrollProgress={scrollVal} />
+      </div>
+
+      {/* Scroll indicator prompt */}
+      <div
+        className="pb-8 z-20 flex flex-col items-center pointer-events-none opacity-50 hover:opacity-90 transition-opacity"
+        style={{ letterSpacing: "0.08em", fontSize: 11, textTransform: "uppercase" }}
+      >
+        <span style={{ color: "#e6e4dc" }}>Scroll to Contact</span>
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="#e6e4dc"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="mt-1 animate-bounce"
+        >
+          <path d="M7 13l5 5 5-5M7 6l5 5 5-5" />
+        </svg>
+      </div>
+    </section>
+  );
+}
+
 interface ContactSectionProps {
   onOpenCal?: () => void;
 }
@@ -100,57 +161,10 @@ export function ContactSection({ onOpenCal }: ContactSectionProps) {
         }}
       />
 
-      {/* ── 2. HERO VIEWPORT WITH 3D RETRO PHONE CLUSTER ── */}
-      <section
-        id="contact-hero"
-        className="relative w-full h-screen flex flex-col items-center justify-between overflow-hidden"
-      >
-        {/* Top headline area in hero */}
-        <div className="w-full flex flex-col items-center pt-[14vh] z-20 pointer-events-none">
-          <motion.h1
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.85, ease: [0.16, 1, 0.3, 1] }}
-            className="font-stix text-center leading-none px-4 select-none"
-            style={{
-              fontSize: "clamp(64px, 11vw, 160px)",
-              fontWeight: 400,
-              color: "#f5f0e6",
-              letterSpacing: "-0.015em",
-              textShadow:
-                "0 0 20px rgba(255,235,190,0.55), 0 0 40px rgba(255,235,190,0.25), 0 4px 18px rgba(0,0,0,0.9)",
-            }}
-          >
-            “Hello”
-          </motion.h1>
-        </div>
-
-        {/* 3D WebGL Canvas (scales down 1 -> 0.6 and translates upward as user scrolls) */}
-        <div className="absolute inset-0 z-10 pointer-events-auto">
-          <ContactScene scrollProgress={scrollVal} />
-        </div>
-
-        {/* Scroll indicator prompt */}
-        <div
-          className="pb-8 z-20 flex flex-col items-center pointer-events-none opacity-50 hover:opacity-90 transition-opacity"
-          style={{ letterSpacing: "0.08em", fontSize: 11, textTransform: "uppercase" }}
-        >
-          <span style={{ color: "#e6e4dc" }}>Scroll to Contact</span>
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="#e6e4dc"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="mt-1 animate-bounce"
-          >
-            <path d="M7 13l5 5 5-5M7 6l5 5 5-5" />
-          </svg>
-        </div>
-      </section>
+      {/* ── 2. PINNED HANDSHAKE BURST WIPE TO PHONE REVEAL HERO ── */}
+      <HandshakeToContactTransition>
+        <PhoneRevealSection scrollVal={scrollVal} />
+      </HandshakeToContactTransition>
 
       {/* ── 3. MAIN CONTACT BODY ("Good buy." + 3-Column Info + Ticket Card + Footer) ── */}
       <section

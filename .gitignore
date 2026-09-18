@@ -4,3 +4,4 @@ scratch/
 www.shader.se/
 *.log
 tsconfig.tsbuildinfo
+.env

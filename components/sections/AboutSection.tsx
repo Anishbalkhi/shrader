@@ -17,10 +17,6 @@ const GoldenTieScene = dynamic(
   () => import("@/components/canvas/GoldenTieScene").then((m) => m.GoldenTieScene),
   { ssr: false }
 );
-const HandshakeScene = dynamic(
-  () => import("@/components/canvas/HandshakeScene").then((m) => m.HandshakeScene),
-  { ssr: false }
-);
 
 function PagePeelSection() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -156,15 +152,12 @@ export function AboutSection({
 
   const handleTriggerShred = () => {
     sound.playShred();
-    if (typeof window !== "undefined") {
-      window.location.hash = "contact";
-    }
     setIsShredding(true);
     // Smoothly scroll to the dark finale underneath as the shred wipe tears the page apart
     setTimeout(() => {
-      const el = document.getElementById("contact") || document.getElementById("shred-payoff");
+      const el = document.getElementById("shred");
       if (el) {
-        el.scrollIntoView({ behavior: "smooth" });
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
       }
     }, 450);
 
@@ -214,7 +207,7 @@ export function AboutSection({
   return (
     <div
       id="about-us"
-      className="relative w-full min-h-screen text-[#1f1e1a] select-none overflow-x-hidden"
+      className="relative w-full min-h-screen text-[#1f1e1a] select-none"
       style={{
         backgroundColor: "#EFE9D3", // Warm vintage newsprint paper
       }}
@@ -713,122 +706,9 @@ export function AboutSection({
         ))}
       </div>
 
-      {/* ── 9. THE PHYSICAL PUNCHLINE: "HAD ENOUGH READING? LET'S SHRED THIS THING." (`Mc`) ── */}
-      <section
-        aria-label="Paper Shredder Finale"
-        className="relative w-full max-w-[1600px] mx-auto px-6 sm:px-12 lg:px-16 pt-16 sm:pt-24 pb-20 sm:pb-28"
-      >
-        <div className="w-full flex flex-col lg:flex-row items-center justify-between gap-10 lg:gap-16">
-          {/* Left: Punchline Headline & Shred Trigger */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-60px" }}
-            transition={{ duration: 0.85, ease: [0.16, 1, 0.3, 1] }}
-            className="w-full lg:w-1/2 flex flex-col items-center lg:items-start text-center lg:text-left"
-          >
-            <h2
-              className="font-stix text-[#1f1e1a] leading-[1.08] tracking-[-0.015em]"
-              style={{
-                fontSize: "clamp(38px, 5.5vw, 86px)",
-                fontWeight: 400,
-              }}
-            >
-              Had Enough Reading? Let&apos;s Shred This Thing.
-            </h2>
-            <p className="font-stix text-lg sm:text-2xl text-[#4a4742] mt-6 font-normal max-w-xl">
-              Ready to cut through the noise? Let&apos;s turn your vision into an
-              award-winning interactive reality.
-            </p>
-
-            {/* Shred Actions */}
-            <div className="mt-8 flex flex-wrap items-center justify-center lg:justify-start gap-4">
-              <button
-                onClick={handleTriggerShred}
-                onMouseEnter={() => sound.playHover()}
-                className="px-8 py-4 rounded bg-[#5E33BF] hover:bg-[#6f3de0] text-white font-stix text-xl font-medium flex items-center gap-3 transition-all duration-200 shadow-[0_4px_16px_rgba(94,51,191,0.35)] focus:outline-none cursor-pointer active:scale-95"
-              >
-                <span className="text-xl">✂️</span>
-                <span>Shred This Document</span>
-              </button>
-
-              <button
-                onClick={handleOpenCal}
-                onMouseEnter={() => sound.playHover()}
-                className="px-8 py-4 rounded border border-black/20 hover:border-black/50 text-[#1f1e1a] font-stix text-xl font-normal transition-all duration-200 bg-white/40 flex items-center gap-2"
-              >
-                <img
-                  src="/textures/icons/old_phone.svg"
-                  alt=""
-                  className="w-4 h-4 brightness-0 opacity-80"
-                />
-                <span>Book a Consultation</span>
-              </button>
-
-              {isShredded && (
-                <button
-                  onClick={handleRestore}
-                  onMouseEnter={() => sound.playHover()}
-                  className="px-6 py-3 rounded text-sm font-mono text-stone-600 underline hover:text-stone-900 transition-colors"
-                >
-                  ↩ Unshred / Restore Document
-                </button>
-              )}
-            </div>
-
-            {/* Shred status notice */}
-            {isShredded && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mt-6 p-4 rounded bg-[#FAF7EF] border border-black/20 font-mono text-xs text-stone-700 max-w-md flex flex-col gap-1 shadow-sm"
-              >
-                <div className="flex items-center gap-2 text-green-700 font-bold">
-                  <span>✓</span>
-                  <span>EVIDENCE SHREDDED INTO 28 SLICES</span>
-                </div>
-                <p>
-                  Standard postal correspondence bypassed. Launching direct
-                  executive video consultation terminal...
-                </p>
-              </motion.div>
-            )}
-          </motion.div>
-
-          {/* Right: Filip Shredding Graphic (`/textures/filip_footer_5.webp`) */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true, margin: "-60px" }}
-            transition={{ duration: 0.85, ease: [0.16, 1, 0.3, 1] }}
-            className="w-full lg:w-1/2 flex justify-center lg:justify-end"
-          >
-            <div
-              onClick={handleTriggerShred}
-              className={`relative w-full max-w-[520px] drop-shadow-[0_15px_30px_rgba(0,0,0,0.18)] transition-all duration-500 cursor-pointer ${isShredded
-                ? "scale-105 filter contrast-125"
-                : "hover:scale-[1.02] hover:brightness-105"
-                }`}
-              title="Click Filip to shred the document!"
-            >
-              <img
-                src="/textures/filip_footer_5.webp"
-                alt="Filip Shredding Paper"
-                className="w-full h-auto object-contain"
-                draggable={false}
-              />
-            </div>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* ── 10. SHRED PAYOFF: GOLDEN TIE & HANDSHAKE CEREMONY ── */}
-      <div id="contact" data-section="shred-payoff" className="relative w-full bg-[#07080a] text-white">
-        {/* Golden Tie Mock Award Ceremony */}
-        <GoldenTieScene onOpenCal={handleOpenCal} />
-
-        {/* Handshake Close-up: Hands closing a deal */}
-        <HandshakeScene />
+      {/* ── 9. OVERLAPPING SECTIONS: UPPER SECTION PEELS TO REVEAL BEHIND SECTION & STAR ZOOM ── */}
+      <div id="shred" data-section="shred-payoff" className="relative w-full bg-[#07080a] text-white">
+        <GoldenTieScene onOpenCal={handleOpenCal} onTriggerShred={handleTriggerShred} />
       </div>
 
       {/* Interactive Cal.com Booking Modal */}

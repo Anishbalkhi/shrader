@@ -25,7 +25,7 @@ body {
   background-color: #000000;
   color: var(--foreground);
   font-family: 'STIX Two Text', Georgia, Cambria, 'Times New Roman', serif;
-  overflow-x: hidden;
+  overflow-x: clip;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

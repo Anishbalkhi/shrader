@@ -7,6 +7,7 @@ import { Navigation, BackendBadge, LoadingScreen } from "@/components/ui";
 import { Hero } from "@/components/sections";
 import { CalModal } from "@/components/modals";
 import { sound } from "@/lib/sound";
+import { consumeNavTransition, setNavTransition } from "@/lib/pageTransition";
 
 // Dynamic import for 3D Canvas Scene to prevent SSR window issues
 const Scene = dynamic(
@@ -18,7 +19,14 @@ export default function HomePage() {
   const router = useRouter();
   const [isCalOpen, setIsCalOpen] = useState(false);
   const [backend, setBackend] = useState<"WebGPU" | "WebGL">("WebGPU");
-  const [isLoading, setIsLoading] = useState(true);
+  // Skip the loading screen if the shader has already booted this session
+  // (e.g. returning from /work). Using a lazy initializer reads sessionStorage
+  // synchronously before the first render so LoadingScreen never mounts — a
+  // useEffect would still show one frame of the loading screen before firing.
+  const [isLoading, setIsLoading] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return sessionStorage.getItem("shader_has_loaded") !== "true";
+  });
   const [scrollProgress, setScrollProgress] = useState(0);
   const [isNavigatingToWork, setIsNavigatingToWork] = useState(false);
   const [isReverseEntering, setIsReverseEntering] = useState(false);
@@ -51,7 +59,13 @@ export default function HomePage() {
         return;
       }
 
-      const isReverse = window.location.search.includes("reverse=1");
+      // The reverse=1 query param drives the zoom-out entrance; the
+      // sessionStorage flag is a belt-and-suspenders signal for the same
+      // hand-off so the entrance still fires correctly if the query string
+      // ever gets stripped (e.g. a middleware redirect) before we read it.
+      const incoming = consumeNavTransition();
+      const isReverse =
+        window.location.search.includes("reverse=1") || incoming === "work-to-home";
 
       if (isReverse) {
         setIsLoading(false);
@@ -94,6 +108,7 @@ export default function HomePage() {
         setIsNavigatingToWork(true);
         sound.playClick();
         setTimeout(() => {
+          setNavTransition("home-to-work");
           router.push("/work");
         }, 200);
       }

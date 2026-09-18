@@ -10,6 +10,16 @@ import { sound } from "@/lib/sound";
 
 useGLTF.preload("/models/tie.glb");
 
+// Preload Filip's photo immediately at module load time so it's fully decoded
+// before createUpperSectionTexture() is ever called — prevents the WebGL
+// canvas texture from briefly showing a photo-less version on first draw.
+const _filipImg = new Image();
+_filipImg.crossOrigin = "anonymous";
+_filipImg.src = "/textures/filip_footer_5.webp";
+// Kick off async decode now (no await needed — by the time the WebGL scene
+// mounts and createUpperSectionTexture runs, the image will be ready).
+_filipImg.decode().catch(() => { /* non-fatal — onload fallback handles it */ });
+
 // ─────────────────────────────────────────────────────────────
 // SHARED HELPERS
 // ─────────────────────────────────────────────────────────────
@@ -81,11 +91,10 @@ function createUpperSectionTexture(): THREE.CanvasTexture {
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.needsUpdate = true;
 
-  // Load Filip's cutout photo asynchronously and draw onto the texture
-  const img = new Image();
-  img.src = "/textures/filip_footer_5.webp";
-  img.crossOrigin = "anonymous";
-  img.onload = () => {
+  // Draw Filip's cutout photo — use the pre-decoded module-level image if it
+  // has already loaded (naturalWidth > 0), otherwise fall back to onload so
+  // the texture still works even if preload somehow didn't finish in time.
+  const drawFilip = (img: HTMLImageElement) => {
     const imgAspect = img.width / img.height;
     const drawH = 1120;
     const drawW = drawH * imgAspect;
@@ -98,9 +107,18 @@ function createUpperSectionTexture(): THREE.CanvasTexture {
     ctx.shadowOffsetY = 18;
     ctx.drawImage(img, drawX, drawY, drawW, drawH);
     ctx.restore();
-
     tex.needsUpdate = true;
   };
+
+  if (_filipImg.naturalWidth > 0) {
+    // Already decoded — draw synchronously so the first render of this texture
+    // already contains the photo (no pop-in).
+    drawFilip(_filipImg);
+  } else {
+    // Still loading — draw once it arrives.  Rare after the module-level
+    // decode() preload, but keeps correctness on slow connections.
+    _filipImg.onload = () => drawFilip(_filipImg);
+  }
 
   return tex;
 }
@@ -610,10 +628,14 @@ export function GoldenTieScene({
       const pPeel = clamp01(progress / 0.28);
       peelProgressRef.current = pPeel;
 
-      // DOM overlay: interactive buttons and text on the flat unpeeled sheet
+      // DOM overlay: interactive buttons and text on the flat unpeeled sheet.
+      // Hide with an instant cut (visibility) rather than a cross-fade the moment
+      // any scroll starts — blending two visually-different renditions of the
+      // same content (crisp DOM vs. canvas-drawn WebGL texture) over several
+      // frames is what reads as a doubled/ghosted image.
       if (upperDomRef.current) {
-        if (progress <= 0.02) {
-          upperDomRef.current.style.opacity = String(1.0 - progress / 0.02);
+        if (progress < 0.001) {
+          upperDomRef.current.style.opacity = "1";
           upperDomRef.current.style.pointerEvents = "auto";
           upperDomRef.current.style.visibility = "visible";
         } else {

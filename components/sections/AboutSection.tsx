@@ -18,13 +18,25 @@ const GoldenTieScene = dynamic(
   { ssr: false }
 );
 
-function PagePeelSection() {
+interface PagePeelSectionProps {
+  /**
+   * Fired once when the page has been scrolled fully into its peeled state
+   * (progress reaches 1) and the visitor keeps scrolling up. Lets the parent
+   * treat "scroll past the peel" as an exit gesture back to the Work page.
+   */
+  onOverPeel?: () => void;
+}
+
+function PagePeelSection({ onOverPeel }: PagePeelSectionProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const progressMotion = useMotionValue(0);
 
   const targetProgressRef = useRef(0);
   const currentProgressRef = useRef(0);
   const autoResetTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // Guards onOverPeel so a single fully-peeled scroll burst only fires once,
+  // instead of once per wheel/touch event while pinned at progress === 1.
+  const overPeelFiredRef = useRef(false);
 
   useEffect(() => {
     let animId: number;
@@ -50,6 +62,12 @@ function PagePeelSection() {
           const delta = (-e.deltaY) * 0.0022;
           targetProgressRef.current = Math.min(1.0, targetProgressRef.current + delta);
 
+          if (targetProgressRef.current >= 1 && !overPeelFiredRef.current) {
+            // Fully peeled and still scrolling up — treat as "exit to Work"
+            overPeelFiredRef.current = true;
+            onOverPeel?.();
+          }
+
           if (autoResetTimerRef.current) clearTimeout(autoResetTimerRef.current);
           // Gently auto-settle back to flat after 2.5s if left untouched
           autoResetTimerRef.current = setTimeout(() => {
@@ -60,14 +78,17 @@ function PagePeelSection() {
           e.preventDefault();
           const delta = e.deltaY * 0.0025;
           targetProgressRef.current = Math.max(0, targetProgressRef.current - delta);
+          overPeelFiredRef.current = false;
           if (autoResetTimerRef.current) clearTimeout(autoResetTimerRef.current);
         } else {
           // Normal downward scroll: keep flat (progress = 0)
           targetProgressRef.current = 0;
+          overPeelFiredRef.current = false;
         }
       } else {
         // Scrolled down the page: keep flat
         targetProgressRef.current = 0;
+        overPeelFiredRef.current = false;
       }
     };
 
@@ -86,9 +107,14 @@ function PagePeelSection() {
         if (diffY > 12) {
           e.preventDefault();
           targetProgressRef.current = Math.min(1.0, (diffY - 12) * 0.0035);
+          if (targetProgressRef.current >= 1 && !overPeelFiredRef.current) {
+            overPeelFiredRef.current = true;
+            onOverPeel?.();
+          }
           if (autoResetTimerRef.current) clearTimeout(autoResetTimerRef.current);
         } else if (targetProgressRef.current > 0.02 && diffY < -10) {
           targetProgressRef.current = Math.max(0, targetProgressRef.current - 0.06);
+          overPeelFiredRef.current = false;
         }
       }
     };
@@ -113,7 +139,7 @@ function PagePeelSection() {
       window.removeEventListener("touchmove", handleTouchMove);
       window.removeEventListener("touchend", handleTouchEnd);
     };
-  }, [progressMotion]);
+  }, [progressMotion, onOverPeel]);
 
   return (
     <section
@@ -130,11 +156,19 @@ function PagePeelSection() {
 interface AboutSectionProps {
   onOpenCal?: () => void;
   showNavigation?: boolean;
+  /**
+   * Fired when the visitor scrolls up past the fully-peeled state at the top
+   * of the page — treated as a request to navigate back to the Work page.
+   * Owned by the parent route (app/about-us/page.tsx) so it can drive the
+   * matching exit overlay + router.push.
+   */
+  onExitToWork?: () => void;
 }
 
 export function AboutSection({
   onOpenCal,
   showNavigation = true,
+  onExitToWork,
 }: AboutSectionProps) {
   const [internalCalOpen, setInternalCalOpen] = useState(false);
   const [emailInput, setEmailInput] = useState("");
@@ -301,7 +335,7 @@ export function AboutSection({
       </AnimatePresence>
 
       {/* ── 1 & 2. 3D CUBICLE MATRIX TO TEAM BANNER PAGE CURL & PEEL TRANSITION ── */}
-      <PagePeelSection />
+      <PagePeelSection onOverPeel={onExitToWork} />
 
       {/* ── 3. NARRATIVE ARC: PART 1 & 2 (Sincere Pitch + Capabilities + The Hinge Line) ── */}
       <section

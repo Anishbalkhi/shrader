@@ -203,7 +203,12 @@ const curlVertexShader = `
     float cornerWeight = smoothstep(-0.1, 0.6, pos.x / (uPlaneSize.x * 0.5)) * 
                          smoothstep(-0.1, 0.6, pos.y / (uPlaneSize.y * 0.5));
     float effectiveLift = uHoverLift * cornerWeight * (1.0 - uProgress * 0.85);
-    float progress = clamp(uProgress + effectiveLift, 0.0, 1.08);
+    float rawProgress = clamp(uProgress + effectiveLift, 0.0, 1.08);
+    // Ease the sweep itself (smootherstep) so the fold accelerates out of the
+    // corner and settles into the far edge instead of moving at a constant
+    // rate — a linear sweep reads as mechanical/rigid for a paper curl.
+    float eased = rawProgress * rawProgress * rawProgress * (rawProgress * (rawProgress * 6.0 - 15.0) + 10.0);
+    float progress = eased;
 
     // Sweep vector moves crease line from top-right corner across the plane
     vec2 sweepDir = normalize(vec2(-0.45, -1.0));
@@ -291,7 +296,14 @@ const curlFragmentShader = `
     float rollLength = PI * uRadius;
 
     // ── 1. REVEALED UNDERLYING LAYER: Discard peeled fragments to cleanly reveal the 3D model scene behind it ──
-    if (vCurlDist >= rollLength) {
+    // Discarding a hair before the exact wrap/tangent branch boundary (instead
+    // of exactly at it) hides the thin strip of triangles that straddle the
+    // two displacement formulas in the vertex shader — those get rasterized
+    // from mismatched vertex math and can flash as a stretched, wrong-looking
+    // sliver of the texture right at the fold's leading edge. The revealed
+    // layer behind always covers the full plane, so discarding slightly
+    // early never opens a visible gap.
+    if (vCurlDist >= rollLength * 0.985) {
       discard;
     }
 
@@ -457,7 +469,11 @@ const behindFragmentShader = `
     float cornerWeight = smoothstep(-0.1, 0.6, vWorldPos.x / (uPlaneSize.x * 0.5)) * 
                          smoothstep(-0.1, 0.6, vWorldPos.y / (uPlaneSize.y * 0.5));
     float effectiveLift = uHoverLift * cornerWeight * (1.0 - uProgress * 0.85);
-    float progress = clamp(uProgress + effectiveLift, 0.0, 1.08);
+    float rawProgress = clamp(uProgress + effectiveLift, 0.0, 1.08);
+    // Same smootherstep easing as the curl vertex shader — the shadow has to
+    // track the actual fold position, not a linear approximation of it, or
+    // it visibly drifts out of alignment with the curl for most of the scroll.
+    float progress = rawProgress * rawProgress * rawProgress * (rawProgress * (rawProgress * 6.0 - 15.0) + 10.0);
     float s0 = mix(s_min - 0.08, s_max + rollLength + 0.45, progress);
 
     float s = dot(vWorldPos.xy, dir);
